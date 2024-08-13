@@ -1,0 +1,5 @@
+package views
+
+func InitViews() {
+	
+}
