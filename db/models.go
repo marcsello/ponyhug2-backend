@@ -9,26 +9,30 @@ import (
 )
 
 type CardBase struct {
-	ID       int32
-	Key      *string
-	Name     string
-	Story    *string
-	Source   *string
-	ImageUrl string
-	Place    int32
+	ID     int16
+	Key    *string
+	Name   string
+	Source *string
+	Place  int32
 }
 
 type CardCopy struct {
 	ID        int32
-	PlayerID  int32
-	BaseID    int32
+	PlayerID  int16
+	BaseID    int16
 	Timestamp pgtype.Timestamp
 	WearLevel int16
 	Key       string
 }
 
+type CardWearImg struct {
+	BaseID    int16
+	WearLevel int16
+	ImageUrl  string
+}
+
 type Player struct {
-	ID         int32
+	ID         int16
 	Name       string
 	Registered pgtype.Timestamp
 	IsAdmin    bool

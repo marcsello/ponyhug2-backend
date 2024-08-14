@@ -9,32 +9,52 @@ import (
 	"context"
 )
 
-const getCardBase = `-- name: GetCardBase :one
-SELECT id, key, name, story, source, image_url, place FROM card_base
-WHERE id = $1 LIMIT 1
+const createPlayer = `-- name: CreatePlayer :one
+INSERT INTO player (name)
+VALUES ($1)
+RETURNING id, name, registered, is_admin
 `
 
-func (q *Queries) GetCardBase(ctx context.Context, id int32) (CardBase, error) {
+func (q *Queries) CreatePlayer(ctx context.Context, name string) (Player, error) {
+	row := q.db.QueryRow(ctx, createPlayer, name)
+	var i Player
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Registered,
+		&i.IsAdmin,
+	)
+	return i, err
+}
+
+const getCardBase = `-- name: GetCardBase :one
+SELECT id, key, name, source, place
+FROM card_base
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetCardBase(ctx context.Context, id int16) (CardBase, error) {
 	row := q.db.QueryRow(ctx, getCardBase, id)
 	var i CardBase
 	err := row.Scan(
 		&i.ID,
 		&i.Key,
 		&i.Name,
-		&i.Story,
 		&i.Source,
-		&i.ImageUrl,
 		&i.Place,
 	)
 	return i, err
 }
 
 const getPlayer = `-- name: GetPlayer :one
-SELECT id, name, registered, is_admin FROM player
-WHERE id = $1 LIMIT 1
+SELECT id, name, registered, is_admin
+FROM player
+WHERE id = $1
+LIMIT 1
 `
 
-func (q *Queries) GetPlayer(ctx context.Context, id int32) (Player, error) {
+func (q *Queries) GetPlayer(ctx context.Context, id int16) (Player, error) {
 	row := q.db.QueryRow(ctx, getPlayer, id)
 	var i Player
 	err := row.Scan(
@@ -44,4 +64,152 @@ func (q *Queries) GetPlayer(ctx context.Context, id int32) (Player, error) {
 		&i.IsAdmin,
 	)
 	return i, err
+}
+
+const getPlayerCards = `-- name: GetPlayerCards :many
+SELECT card_copy.id, card_copy.player_id, card_copy.base_id, card_copy.timestamp, card_copy.wear_level, card_copy.key, card_base.id, card_base.key, card_base.name, card_base.source, card_base.place
+FROM card_copy
+         JOIN card_base ON card_copy.base_id = card_base.id
+WHERE player_id = $1
+`
+
+type GetPlayerCardsRow struct {
+	CardCopy CardCopy
+	CardBase CardBase
+}
+
+func (q *Queries) GetPlayerCards(ctx context.Context, playerID int16) ([]GetPlayerCardsRow, error) {
+	rows, err := q.db.Query(ctx, getPlayerCards, playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetPlayerCardsRow{}
+	for rows.Next() {
+		var i GetPlayerCardsRow
+		if err := rows.Scan(
+			&i.CardCopy.ID,
+			&i.CardCopy.PlayerID,
+			&i.CardCopy.BaseID,
+			&i.CardCopy.Timestamp,
+			&i.CardCopy.WearLevel,
+			&i.CardCopy.Key,
+			&i.CardBase.ID,
+			&i.CardBase.Key,
+			&i.CardBase.Name,
+			&i.CardBase.Source,
+			&i.CardBase.Place,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPlayers = `-- name: GetPlayers :many
+
+SELECT id, name, registered, is_admin
+FROM player
+`
+
+// Player stuffs
+func (q *Queries) GetPlayers(ctx context.Context) ([]Player, error) {
+	rows, err := q.db.Query(ctx, getPlayers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Player{}
+	for rows.Next() {
+		var i Player
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Registered,
+			&i.IsAdmin,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const makeFirstCopy = `-- name: MakeFirstCopy :one
+INSERT INTO card_copy (player_id, base_id, key)
+VALUES ($1,
+        (SELECT id FROM card_base WHERE card_base.key = $2),
+        random_string(10))
+RETURNING id, player_id, base_id, timestamp, wear_level, key
+`
+
+type MakeFirstCopyParams struct {
+	PlayerID int16
+	Key      *string
+}
+
+func (q *Queries) MakeFirstCopy(ctx context.Context, arg MakeFirstCopyParams) (CardCopy, error) {
+	row := q.db.QueryRow(ctx, makeFirstCopy, arg.PlayerID, arg.Key)
+	var i CardCopy
+	err := row.Scan(
+		&i.ID,
+		&i.PlayerID,
+		&i.BaseID,
+		&i.Timestamp,
+		&i.WearLevel,
+		&i.Key,
+	)
+	return i, err
+}
+
+const makeSubsequentCopy = `-- name: MakeSubsequentCopy :one
+INSERT INTO card_copy (player_id, base_id, wear_level, key)
+WITH
+    t AS (
+    SELECT card_base.id as base_id, card_copy.wear_level+1 as new_wear_level
+    FROM card_copy JOIN card_base ON card_copy.base_id = card_base.id
+    WHERE card_copy.key = $2
+    )
+VALUES ($1,
+        t.base_id,
+        t.new_wear_level,
+        random_string(10)) -- hopefully this does not result in a conflict
+RETURNING id, player_id, base_id, timestamp, wear_level, key
+`
+
+type MakeSubsequentCopyParams struct {
+	PlayerID int16
+	Key      string
+}
+
+func (q *Queries) MakeSubsequentCopy(ctx context.Context, arg MakeSubsequentCopyParams) (CardCopy, error) {
+	row := q.db.QueryRow(ctx, makeSubsequentCopy, arg.PlayerID, arg.Key)
+	var i CardCopy
+	err := row.Scan(
+		&i.ID,
+		&i.PlayerID,
+		&i.BaseID,
+		&i.Timestamp,
+		&i.WearLevel,
+		&i.Key,
+	)
+	return i, err
+}
+
+const promotePlayer = `-- name: PromotePlayer :exec
+UPDATE player
+SET is_admin = true
+WHERE id = $1
+`
+
+func (q *Queries) PromotePlayer(ctx context.Context, id int16) error {
+	_, err := q.db.Exec(ctx, promotePlayer, id)
+	return err
 }

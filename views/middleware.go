@@ -3,18 +3,19 @@ package views
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/marcsello/ponyhug2-backend/db"
 	"gitlab.com/MikeTTh/env"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"net/http"
-	"ponyhug2-backend/db"
 	"strings"
 	"time"
 )
 
 const (
-	loggerKey = "lgr"
-	playerKey = "p"
+	loggerKey    = "l"
+	playerKey    = "p"
+	dbQueriesKey = "q"
 )
 
 type AccessLevel uint8
@@ -109,14 +110,19 @@ func enforceAccessMiddleware(level AccessLevel, userOnly bool) gin.HandlerFunc {
 				l.Warn("Could not validate user token!", zap.Error(err))
 			} else {
 
-				player := // TODO: load from db
+				q := GetQueriesFromContext(ctx)
 
+				var player db.Player
+				player, err = q.GetPlayer(ctx, playerID)
+				if err != nil {
+					l.Error("Failure while querying player", zap.Error(err))
+					ctx.AbortWithStatus(http.StatusInternalServerError)
+					return
+				}
 				hasValidToken = true
 				isAdmin = player.IsAdmin
-				ctx.Set(playerKey, player)
-
+				ctx.Set(playerKey, &player) // don't store the entire player in the context, only a pointer to it
 			}
-
 
 		} else if strings.HasPrefix(authHeader, AuthHeaderKeyPrefix) { // key auth is easy
 
@@ -157,9 +163,15 @@ func enforceAccessMiddleware(level AccessLevel, userOnly bool) gin.HandlerFunc {
 			}
 
 		case AccessLevelAdmin: // accept key or token of an admin
-			if !(hasValidCreds && isAdmin) {
-				l.Warn("No valid creds presented or not admin", zap.Bool("isAdmin", isAdmin), zap.Bool("hasValidCreds", hasValidCreds))
+			if !hasValidCreds {
+				l.Warn("No valid creds presented", zap.Bool("isAdmin", isAdmin), zap.Bool("hasValidCreds", hasValidCreds))
 				ctx.AbortWithStatus(http.StatusUnauthorized)
+				return
+			}
+
+			if !isAdmin {
+				l.Warn("Not an admin", zap.Bool("isAdmin", isAdmin), zap.Bool("hasValidCreds", hasValidCreds))
+				ctx.AbortWithStatus(http.StatusForbidden)
 				return
 			}
 		default:
@@ -169,11 +181,33 @@ func enforceAccessMiddleware(level AccessLevel, userOnly bool) gin.HandlerFunc {
 	}
 }
 
-
 func GetPlayerFromContext(ctx *gin.Context) *db.Player {
 	p, ok := ctx.Get(playerKey)
 	if !ok {
 		return nil
 	}
 	return p.(*db.Player) // this may panic
+}
+
+func withDBQueries(q *db.Queries) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		ctx.Set(dbQueriesKey, q)
+	}
+}
+
+func GetQueriesFromContext(ctx *gin.Context) *db.Queries {
+	q, ok := ctx.Get(dbQueriesKey)
+	if !ok {
+		panic("no queries in context")
+	}
+	return q.(*db.Queries)
+}
+
+// injectUsernameToLogger should be only added after both authN and logger middleware were invoked, it only updates the stored logger to include the username
+func injectPlayerToLogger(ctx *gin.Context) {
+	l := GetLoggerFromContext(ctx)
+	p := GetPlayerFromContext(ctx)
+	if p != nil {
+		ctx.Set(loggerKey, l.With(zap.String("player", p.Name)))
+	}
 }

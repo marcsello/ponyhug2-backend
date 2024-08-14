@@ -1,4 +1,4 @@
-module ponyhug2-backend
+module github.com/marcsello/ponyhug2-backend
 
 go 1.22
 
