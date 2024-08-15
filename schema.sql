@@ -1,12 +1,12 @@
 CREATE TABLE IF NOT EXISTS card_base
 (
     id     SMALLSERIAL PRIMARY KEY,
-    key    VARCHAR(9),
+    key    VARCHAR(9)      NULL,    -- these cards can only be obtained by some special actions
 
-    name   VARCHAR(64)    NOT NULL,
-    source VARCHAR(255)   NULL,
+    name   VARCHAR(64)     NOT NULL,
+    source VARCHAR(255)    NULL,
 
-    place  INTEGER UNIQUE NOT NULL -- known as "order" in PonyHug1
+    place  SMALLINT UNIQUE NOT NULL -- known as "order" in PonyHug1
 );
 
 CREATE TABLE IF NOT EXISTS card_wear_img
@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS card_wear_img
 
 CREATE TABLE IF NOT EXISTS player
 (
-    id         SMALLSERIAL PRIMARY KEY,
-    name       varchar(60) UNIQUE NOT NULL,
+    id         SERIAL PRIMARY KEY,
+    name       varchar(64) UNIQUE NOT NULL,
     registered TIMESTAMP          NOT NULL DEFAULT now(),
 
     is_admin   BOOLEAN            NOT NULL DEFAULT false
@@ -34,15 +34,16 @@ CREATE TABLE IF NOT EXISTS player
 
 CREATE TABLE IF NOT EXISTS card_copy
 (
-    id         SERIAL PRIMARY KEY,
-    player_id  SMALLINT           NOT NULL,
-    base_id    SMALLINT           NOT NULL,
+    id                 SERIAL PRIMARY KEY,
+    player_id          INTEGER            NOT NULL,
+    base_id            SMALLINT           NOT NULL,
 
-    timestamp  TIMESTAMP          NOT NULL DEFAULT now(),
-    wear_level SMALLINT           NOT NULL DEFAULT 0, -- 0 indicates an "original copy"
-    key        VARCHAR(10) UNIQUE NOT NULL,
+    copied_from_player INTEGER            NULL,
+    timestamp          TIMESTAMP          NOT NULL DEFAULT now(),
+    wear_level         SMALLINT           NOT NULL DEFAULT 0, -- 0 indicates an "original copy"
+    key                VARCHAR(10) UNIQUE NOT NULL,
 
-    UNIQUE (player_id, base_id),                      -- <- include wear level here to allow having multiple cards of the same base
+    UNIQUE (player_id, base_id),                              -- <- include wear level here to allow having multiple cards of the same base
 
     CONSTRAINT card_copy_base
         FOREIGN KEY (base_id)

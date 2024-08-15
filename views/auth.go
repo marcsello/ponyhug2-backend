@@ -15,7 +15,7 @@ const (
 
 var jwtSecretKey = []byte(env.StringOrPanic("JWT_SECRET"))
 
-func validateJWT(logger *zap.Logger, tokenString string) (int16, error) {
+func validateJWT(logger *zap.Logger, tokenString string) (int32, error) {
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		// Don't forget to validate the alg is what you expect:
@@ -51,17 +51,17 @@ func validateJWT(logger *zap.Logger, tokenString string) (int16, error) {
 	}
 
 	var sub int64
-	sub, err = strconv.ParseInt(subStr, 10, 16)
+	sub, err = strconv.ParseInt(subStr, 10, 32)
 	if err != nil {
 		logger.Error("sub is not a valid int16", zap.Error(err))
 		return 0, err
 	}
 
-	return int16(sub), nil
+	return int32(sub), nil
 
 }
 
-func generateToken(sub int16) (string, error) {
+func generateToken(sub int32) (string, error) {
 	now := time.Now()
 
 	claims := jwt.RegisteredClaims{

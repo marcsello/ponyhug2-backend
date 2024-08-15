@@ -181,10 +181,18 @@ func enforceAccessMiddleware(level AccessLevel, userOnly bool) gin.HandlerFunc {
 	}
 }
 
-func GetPlayerFromContext(ctx *gin.Context) *db.Player {
+// GetPlayerFromContext retrives the player obect from the context. You should only set allowNil to false, when userOnly is set to true in enforceAccessMiddleware
+func GetPlayerFromContext(ctx *gin.Context, allowNil bool) *db.Player {
 	p, ok := ctx.Get(playerKey)
 	if !ok {
-		return nil
+		if allowNil {
+			return nil
+		} else {
+			panic("no player in context")
+		}
+	}
+	if p == nil && (!allowNil) {
+		panic("nil is stored in place of player in context")
 	}
 	return p.(*db.Player) // this may panic
 }
@@ -206,7 +214,7 @@ func GetQueriesFromContext(ctx *gin.Context) *db.Queries {
 // injectUsernameToLogger should be only added after both authN and logger middleware were invoked, it only updates the stored logger to include the username
 func injectPlayerToLogger(ctx *gin.Context) {
 	l := GetLoggerFromContext(ctx)
-	p := GetPlayerFromContext(ctx)
+	p := GetPlayerFromContext(ctx, true)
 	if p != nil {
 		ctx.Set(loggerKey, l.With(zap.String("player", p.Name)))
 	}

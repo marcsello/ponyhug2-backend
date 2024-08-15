@@ -9,6 +9,57 @@ import (
 	"context"
 )
 
+const assignCardImageToWearLevel = `-- name: AssignCardImageToWearLevel :one
+INSERT INTO card_wear_img (base_id, wear_level, image_url)
+VALUES ($1, $2, $3)
+ON CONFLICT (base_id, wear_level) DO UPDATE SET image_url = EXCLUDED.image_url
+RETURNING base_id, wear_level, image_url
+`
+
+type AssignCardImageToWearLevelParams struct {
+	BaseID    int16
+	WearLevel int16
+	ImageUrl  string
+}
+
+func (q *Queries) AssignCardImageToWearLevel(ctx context.Context, arg AssignCardImageToWearLevelParams) (CardWearImg, error) {
+	row := q.db.QueryRow(ctx, assignCardImageToWearLevel, arg.BaseID, arg.WearLevel, arg.ImageUrl)
+	var i CardWearImg
+	err := row.Scan(&i.BaseID, &i.WearLevel, &i.ImageUrl)
+	return i, err
+}
+
+const createCardBase = `-- name: CreateCardBase :one
+INSERT INTO card_base (key, name, source, place)
+VALUES ($1, $2, $3, $4)
+RETURNING id, key, name, source, place
+`
+
+type CreateCardBaseParams struct {
+	Key    *string
+	Name   string
+	Source *string
+	Place  int16
+}
+
+func (q *Queries) CreateCardBase(ctx context.Context, arg CreateCardBaseParams) (CardBase, error) {
+	row := q.db.QueryRow(ctx, createCardBase,
+		arg.Key,
+		arg.Name,
+		arg.Source,
+		arg.Place,
+	)
+	var i CardBase
+	err := row.Scan(
+		&i.ID,
+		&i.Key,
+		&i.Name,
+		&i.Source,
+		&i.Place,
+	)
+	return i, err
+}
+
 const createPlayer = `-- name: CreatePlayer :one
 INSERT INTO player (name)
 VALUES ($1)
@@ -27,22 +78,98 @@ func (q *Queries) CreatePlayer(ctx context.Context, name string) (Player, error)
 	return i, err
 }
 
-const getCardBase = `-- name: GetCardBase :one
-SELECT id, key, name, source, place
-FROM card_base
+const demotePlayer = `-- name: DemotePlayer :exec
+UPDATE player
+SET is_admin = false
 WHERE id = $1
+`
+
+func (q *Queries) DemotePlayer(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, demotePlayer, id)
+	return err
+}
+
+const getCardBases = `-- name: GetCardBases :many
+SELECT id, key, name, source, place, base_id, wear_level, image_url
+FROM card_base
+         LEFT JOIN card_wear_img ON card_base.id = card_wear_img.base_id
+`
+
+type GetCardBasesRow struct {
+	ID        int16
+	Key       *string
+	Name      string
+	Source    *string
+	Place     int16
+	BaseID    *int16
+	WearLevel *int16
+	ImageUrl  *string
+}
+
+func (q *Queries) GetCardBases(ctx context.Context) ([]GetCardBasesRow, error) {
+	rows, err := q.db.Query(ctx, getCardBases)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetCardBasesRow{}
+	for rows.Next() {
+		var i GetCardBasesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Key,
+			&i.Name,
+			&i.Source,
+			&i.Place,
+			&i.BaseID,
+			&i.WearLevel,
+			&i.ImageUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCardCopy = `-- name: GetCardCopy :one
+SELECT card_copy.id, card_copy.key, card_base.place, card_base.name, card_base.source, card_copy.wear_level, card_wear_img.image_url, player.name
+FROM card_copy
+         JOIN card_base ON card_copy.base_id = card_base.id
+         JOIN card_wear_img
+              ON card_copy.base_id = card_wear_img.base_id AND card_wear_img.wear_level <= card_copy.wear_level
+         LEFT JOIN player ON player.id = card_copy.copied_from_player
+WHERE card_copy.id = $1
+ORDER BY card_wear_img.wear_level DESC
 LIMIT 1
 `
 
-func (q *Queries) GetCardBase(ctx context.Context, id int16) (CardBase, error) {
-	row := q.db.QueryRow(ctx, getCardBase, id)
-	var i CardBase
+type GetCardCopyRow struct {
+	ID        int32
+	Key       string
+	Place     int16
+	Name      string
+	Source    *string
+	WearLevel int16
+	ImageUrl  string
+	Name_2    *string
+}
+
+func (q *Queries) GetCardCopy(ctx context.Context, id int32) (GetCardCopyRow, error) {
+	row := q.db.QueryRow(ctx, getCardCopy, id)
+	var i GetCardCopyRow
 	err := row.Scan(
 		&i.ID,
 		&i.Key,
+		&i.Place,
 		&i.Name,
 		&i.Source,
-		&i.Place,
+		&i.WearLevel,
+		&i.ImageUrl,
+		&i.Name_2,
 	)
 	return i, err
 }
@@ -54,7 +181,7 @@ WHERE id = $1
 LIMIT 1
 `
 
-func (q *Queries) GetPlayer(ctx context.Context, id int16) (Player, error) {
+func (q *Queries) GetPlayer(ctx context.Context, id int32) (Player, error) {
 	row := q.db.QueryRow(ctx, getPlayer, id)
 	var i Player
 	err := row.Scan(
@@ -67,18 +194,32 @@ func (q *Queries) GetPlayer(ctx context.Context, id int16) (Player, error) {
 }
 
 const getPlayerCards = `-- name: GetPlayerCards :many
-SELECT card_copy.id, card_copy.player_id, card_copy.base_id, card_copy.timestamp, card_copy.wear_level, card_copy.key, card_base.id, card_base.key, card_base.name, card_base.source, card_base.place
+SELECT card_copy.id, card_copy.key, card_base.place, card_base.name, card_base.source, card_copy.wear_level, card_wear_img.image_url, player.name
 FROM card_copy
          JOIN card_base ON card_copy.base_id = card_base.id
+         JOIN card_wear_img
+              ON card_copy.base_id = card_wear_img.base_id AND card_wear_img.wear_level = (
+                  SELECT MAX(cwi.wear_level)
+                  FROM card_wear_img cwi
+                  WHERE cwi.base_id = card_copy.base_id
+                    AND cwi.wear_level <= card_copy.wear_level
+              )
+         LEFT JOIN player ON player.id = card_copy.copied_from_player
 WHERE player_id = $1
 `
 
 type GetPlayerCardsRow struct {
-	CardCopy CardCopy
-	CardBase CardBase
+	ID        int32
+	Key       string
+	Place     int16
+	Name      string
+	Source    *string
+	WearLevel int16
+	ImageUrl  string
+	Name_2    *string
 }
 
-func (q *Queries) GetPlayerCards(ctx context.Context, playerID int16) ([]GetPlayerCardsRow, error) {
+func (q *Queries) GetPlayerCards(ctx context.Context, playerID int32) ([]GetPlayerCardsRow, error) {
 	rows, err := q.db.Query(ctx, getPlayerCards, playerID)
 	if err != nil {
 		return nil, err
@@ -88,17 +229,14 @@ func (q *Queries) GetPlayerCards(ctx context.Context, playerID int16) ([]GetPlay
 	for rows.Next() {
 		var i GetPlayerCardsRow
 		if err := rows.Scan(
-			&i.CardCopy.ID,
-			&i.CardCopy.PlayerID,
-			&i.CardCopy.BaseID,
-			&i.CardCopy.Timestamp,
-			&i.CardCopy.WearLevel,
-			&i.CardCopy.Key,
-			&i.CardBase.ID,
-			&i.CardBase.Key,
-			&i.CardBase.Name,
-			&i.CardBase.Source,
-			&i.CardBase.Place,
+			&i.ID,
+			&i.Key,
+			&i.Place,
+			&i.Name,
+			&i.Source,
+			&i.WearLevel,
+			&i.ImageUrl,
+			&i.Name_2,
 		); err != nil {
 			return nil, err
 		}
@@ -145,13 +283,14 @@ func (q *Queries) GetPlayers(ctx context.Context) ([]Player, error) {
 const makeFirstCopy = `-- name: MakeFirstCopy :one
 INSERT INTO card_copy (player_id, base_id, key)
 VALUES ($1,
-        (SELECT id FROM card_base WHERE card_base.key = $2),
+        (SELECT id FROM card_base WHERE card_base.key = $2 AND card_base.key IS NOT NULL),
         random_string(10))
-RETURNING id, player_id, base_id, timestamp, wear_level, key
+ON CONFLICT (player_id, base_id) DO UPDATE SET wear_level = 0, copied_from_player = NULL
+RETURNING id, player_id, base_id, copied_from_player, timestamp, wear_level, key
 `
 
 type MakeFirstCopyParams struct {
-	PlayerID int16
+	PlayerID int32
 	Key      *string
 }
 
@@ -162,6 +301,7 @@ func (q *Queries) MakeFirstCopy(ctx context.Context, arg MakeFirstCopyParams) (C
 		&i.ID,
 		&i.PlayerID,
 		&i.BaseID,
+		&i.CopiedFromPlayer,
 		&i.Timestamp,
 		&i.WearLevel,
 		&i.Key,
@@ -170,22 +310,23 @@ func (q *Queries) MakeFirstCopy(ctx context.Context, arg MakeFirstCopyParams) (C
 }
 
 const makeSubsequentCopy = `-- name: MakeSubsequentCopy :one
-INSERT INTO card_copy (player_id, base_id, wear_level, key)
-WITH
-    t AS (
-    SELECT card_base.id as base_id, card_copy.wear_level+1 as new_wear_level
-    FROM card_copy JOIN card_base ON card_copy.base_id = card_base.id
-    WHERE card_copy.key = $2
-    )
+WITH t AS (SELECT src.base_id, src.player_id, (src.wear_level + 1) AS new_wear_level
+           FROM card_copy AS src
+           WHERE src.key = $2)
+INSERT
+INTO card_copy (player_id, base_id, copied_from_player, wear_level, key)
 VALUES ($1,
-        t.base_id,
-        t.new_wear_level,
+        (SELECT base_id FROM t),
+        (SELECT t.player_id FROM t),
+        (SELECT new_wear_level FROM t),
         random_string(10)) -- hopefully this does not result in a conflict
-RETURNING id, player_id, base_id, timestamp, wear_level, key
+ON CONFLICT (player_id, base_id) DO UPDATE SET wear_level = EXCLUDED.wear_level
+WHERE card_copy.wear_level > EXCLUDED.wear_level
+RETURNING id, player_id, base_id, copied_from_player, timestamp, wear_level, key
 `
 
 type MakeSubsequentCopyParams struct {
-	PlayerID int16
+	PlayerID int32
 	Key      string
 }
 
@@ -196,6 +337,7 @@ func (q *Queries) MakeSubsequentCopy(ctx context.Context, arg MakeSubsequentCopy
 		&i.ID,
 		&i.PlayerID,
 		&i.BaseID,
+		&i.CopiedFromPlayer,
 		&i.Timestamp,
 		&i.WearLevel,
 		&i.Key,
@@ -209,7 +351,7 @@ SET is_admin = true
 WHERE id = $1
 `
 
-func (q *Queries) PromotePlayer(ctx context.Context, id int16) error {
+func (q *Queries) PromotePlayer(ctx context.Context, id int32) error {
 	_, err := q.db.Exec(ctx, promotePlayer, id)
 	return err
 }

@@ -4,8 +4,11 @@ go 1.22
 
 require (
 	github.com/gin-gonic/gin v1.10.0
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/jackc/pgx/v5 v5.6.0
+	gitlab.com/MikeTTh/env v0.0.0-20231129141211-633d5922a426
 	go.uber.org/zap v1.27.0
+	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa
 )
 
 require (
@@ -19,7 +22,6 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.20.0 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -32,7 +34,6 @@ require (
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
-	gitlab.com/MikeTTh/env v0.0.0-20231129141211-633d5922a426 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/crypto v0.23.0 // indirect

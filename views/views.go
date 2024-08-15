@@ -15,13 +15,22 @@ func InitViews(logger *zap.Logger, queries *db.Queries) *gin.Engine {
 	r.Use(withDBQueries(queries))
 
 	meGroup := r.Group("/me")
-	meGroup.GET("", enforceAccessMiddleware(AccessLevelRegistered, true), injectPlayerToLogger, getMe)
-	meGroup.GET("/cards", enforceAccessMiddleware(AccessLevelRegistered, true), injectPlayerToLogger, getMyCards)
+	meGroup.Use(enforceAccessMiddleware(AccessLevelRegistered, true), injectPlayerToLogger)
+	meGroup.GET("", getMe)
+	meGroup.GET("/cards", getMyCards)
+	meGroup.POST("/obtain", doObtain)
 
-	playerGroup := r.Group("/player")
+	playerGroup := r.Group("/players")
 	playerGroup.POST("", enforceAccessMiddleware(AccessLevelPublic, false), registerPlayer)
 	playerGroup.GET("", enforceAccessMiddleware(AccessLevelAdmin, false), injectPlayerToLogger, listPlayers)
-	playerGroup.GET("/:id", enforceAccessMiddleware(AccessLevelAdmin, false), injectPlayerToLogger, getAnyPlayer)
+	playerGroup.GET("/:id", enforceAccessMiddleware(AccessLevelAdmin, false), injectPlayerToLogger, getPlayer)
+	playerGroup.PATCH("/:id", enforceAccessMiddleware(AccessLevelAdmin, false), injectPlayerToLogger, patchPlayer)
+
+	cardsGroup := r.Group("/cards")
+	cardsGroup.Use(enforceAccessMiddleware(AccessLevelAdmin, false), injectPlayerToLogger)
+	cardsGroup.GET("", listAllCards)
+	cardsGroup.POST("", createCard)
+	cardsGroup.PUT(":id/wear/:level", upsertWearLevel)
 
 	return r
 }

@@ -13,16 +13,17 @@ type CardBase struct {
 	Key    *string
 	Name   string
 	Source *string
-	Place  int32
+	Place  int16
 }
 
 type CardCopy struct {
-	ID        int32
-	PlayerID  int16
-	BaseID    int16
-	Timestamp pgtype.Timestamp
-	WearLevel int16
-	Key       string
+	ID               int32
+	PlayerID         int32
+	BaseID           int16
+	CopiedFromPlayer *int32
+	Timestamp        pgtype.Timestamp
+	WearLevel        int16
+	Key              string
 }
 
 type CardWearImg struct {
@@ -32,7 +33,7 @@ type CardWearImg struct {
 }
 
 type Player struct {
-	ID         int16
+	ID         int32
 	Name       string
 	Registered pgtype.Timestamp
 	IsAdmin    bool

@@ -5,27 +5,26 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// resolveResultToProperError tries to catch all errors uncaught by gorm and translate them to gorm errors
-func resolveError(err error) error {
+func isPgErrTypeOf(err error, severity, code string) bool {
 	if err == nil {
-		return nil
+		return false
 	}
-
-	// There was an error
 
 	var pgErr *pgconn.PgError
-	if errors.As(result.Error, &pgErr) {
-		if pgErr.Severity == "ERROR" && pgErr.Code == "23505" { // gorm, stupid as always, and can not handle unique key constarint violations...
-			// Log original error? I think it's auto logged...
-			return gorm.ErrDuplicatedKey
-		}
-
-		if pgErr.Severity == "ERROR" && pgErr.Code == "23503" { // gorm, stupid as always, and can not handle foreign key violation...
-			return ErrForeignKeyViolation // <- stupid gorm does not even have error of this type
-		}
-
+	if errors.As(err, &pgErr) {
+		return pgErr.Severity == severity && pgErr.Code == code
 	}
+	return false
+}
 
-	return result.Error
+func IsDuplicatedKeyErr(err error) bool {
+	return isPgErrTypeOf(err, "ERROR", "23505")
+}
 
+func IsForeignKeyViolationErr(err error) bool {
+	return isPgErrTypeOf(err, "ERROR", "23503")
+}
+
+func IsNotNullViolation(err error) bool {
+	return isPgErrTypeOf(err, "ERROR", "23502")
 }

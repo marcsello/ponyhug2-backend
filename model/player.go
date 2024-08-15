@@ -5,15 +5,6 @@ import (
 	"github.com/marcsello/ponyhug2-backend/db"
 )
 
-type PlayerRegister struct {
-	Name string `json:"name"`
-}
-
-type PlayerRegistrationSuccess struct {
-	Name  string `json:"name"`
-	Token string `json:"token"`
-}
-
 type PlayerSelf struct {
 	Name    string `json:"name"`
 	IsAdmin bool   `json:"is_admin"`
@@ -27,7 +18,7 @@ func PlayerSelfFromDB(p db.Player) PlayerSelf {
 }
 
 type PlayerData struct {
-	ID         int16            `json:"id"`
+	ID         int32            `json:"id"`
 	Name       string           `json:"name"`
 	Registered pgtype.Timestamp `json:"registered"` // this can be marshaled it seems
 	IsAdmin    bool             `json:"is_admin"`
