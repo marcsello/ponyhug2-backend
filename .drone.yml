@@ -55,6 +55,9 @@ steps:
     when:
       branch:
         - master
+    depends_on:
+      - hadolint
+      - build
 
   - name: telegram
     image: appleboy/drone-telegram
@@ -65,3 +68,6 @@ steps:
         from_secret: TELEGRAM_CHAT_ID
     when:
       status: [ failure ]
+    depends_on:
+      - build
+      - kaniko
