@@ -8,6 +8,7 @@ steps:
     commands:
       - hadolint --version
       - hadolint --verbose --failure-threshold warning Dockerfile
+      - hadolint --verbose --failure-threshold warning Dockerfile.ci
 
   - name: gosec
     image: securego/gosec
@@ -20,10 +21,29 @@ steps:
     commands:
       - go version
       - go test -v ./...
+  
+  - name: sqlc
+    image: golang:1.22
+    commands:
+      - go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+      - sqlc diff
+      - sqlc vet
+      - sqlc verify
+
+  - name: build
+    image: golang:1.22.6-alpine3.20
+    commands:
+      - apk add --no-cache make=4.4.1-r2
+      - make -j "$(nproc)"
+    depends_on:
+      - sqlc
+      - go_test
+      - gosec
 
   - name: kaniko
     image: plugins/kaniko
     settings:
+      dockerfile: Dockerfile.ci
       username:
         from_secret: DOCKER_USERNAME
       password:

@@ -10,7 +10,7 @@ FROM alpine:3.20
 # hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates
 
-COPY --from=builder /src/ponyhug /app/ponyhug
+COPY --from=builder /src/dist/ponyhug /app/ponyhug
 
 USER 1000
 ENTRYPOINT [ "/app/ponyhug" ]

@@ -23,7 +23,7 @@ LDFLAGS := -X 'main.version=${BUILD_VERSION}' -X 'main.commitHash=${COMMIT_HASH}
 all: ponyhug
 
 ponyhug: main.go dist
-	GOARCH=amd64 go build -v -ldflags="${LDFLAGS}" -o "ponyhug" "."
+	GOARCH=amd64 go build -v -ldflags="${LDFLAGS}" -o "dist/ponyhug" "."
 
 dist:
 	mkdir -p dist
